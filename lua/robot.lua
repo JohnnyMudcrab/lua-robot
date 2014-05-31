@@ -8,6 +8,7 @@ local robot = {}
 local robot_mt = { __index = robot }	-- metatable
 
 local matrix = require 'matrix'
+local dbg = require 'debugger'
 
 -------------------------------------------------
 -- PRIVATE FUNCTIONS
@@ -51,29 +52,57 @@ end
 
 -------------------------------------------------
 
-function robot:rne(q, Qd, Qdd)
+function robot:gravLoad(q, grav)
 
-    -- set velocity and acceleration to zero if not given
+    local tau = {}
     local qd = {}
     local qdd = {}
 
-    if Qdd == nil then
-        for i = 1,self.n,1 do qdd[i] = 0 end
-    else
-        qdd = Qdd
+    for i = 1,self.n,1 do
+        qd[i] = 0
+        qdd[i] = 0
     end
 
-    if Qd == nil then
-        for i = 1,self.n,1 do qd[i] = 0 end
+    if grav == nil then
+        tau = self:rne(q, qd, qdd)
     else
-        qd = Qd
+        tau = self:rne(q, qd, qdd, grav)
+    end
+
+    return tau
+end
+
+-------------------------------------------------
+
+function robot:rne(q, qd, qdd, grav)
+
+    -- set velocity and acceleration to zero if not given
+    -- local qd = {}
+    -- local qdd = {}
+
+    -- if Qdd == nil then
+        -- for i = 1,self.n,1 do qdd[i] = 0 end
+    -- else
+        -- qdd = Qdd
+    -- end
+
+    -- if Qd == nil then
+        -- for i = 1,self.n,1 do qd[i] = 0 end
+    -- else
+        -- qd = Qd
+    -- end
+
+    local vd = {}
+    if grav == nil then
+        vd = matrix {{0},{0},{9.81}}
+    else
+        vd = grav
     end
 
     -- init some variables and compute rotation matrices
-    local z0 = matrix {{1},{2},{3}}
+    local z0 = matrix {{0},{0},{1}}
     local w  = matrix {{0},{0},{0}}
     local wd = matrix {{0},{0},{0}}
-    local vd = matrix {{0},{0},{9.81}}
 
     local link  = {}
 
@@ -101,7 +130,7 @@ function robot:rne(q, Qd, Qdd)
         local PC = self.link[i].rc
 
         local w_  = R*w + z0*qd[i]
-        local wd_ = R*wd
+        local wd_ = R*wd + matrix.cross(R*w, z0*qd[i]) + z0*qdd[i]
         local vd_ = R*(matrix.cross(wd,P)
                     + matrix.cross(w, matrix.cross(w, P)) + vd)
 
@@ -110,11 +139,12 @@ function robot:rne(q, Qd, Qdd)
         wd = wd_
         vd = vd_
 
+
         local vdc = matrix.cross(wd, PC) +
                     matrix.cross(w, matrix.cross(w, PC)) + vd
 
         F[i] = vdc*self.link[i].m
-        N[i] = self.link[i].I*wd + matrix.cross(w, self.link[i].I)
+        N[i] = self.link[i].I*wd + matrix.cross(w, self.link[i].I*w)
 
     end
 
@@ -143,7 +173,6 @@ function robot:rne(q, Qd, Qdd)
         n = n_
 
         tau[i] = matrix.getelement(n, 3, 1)
-        print(tau[i])
     end
 
     return tau
