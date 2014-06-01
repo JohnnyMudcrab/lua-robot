@@ -8,7 +8,6 @@ local robot = {}
 local robot_mt = { __index = robot }	-- metatable
 
 local matrix = require 'matrix'
-local dbg = require 'debugger'
 
 -------------------------------------------------
 -- PRIVATE FUNCTIONS
@@ -22,6 +21,58 @@ local function t2r(T)
     return A
 
 end
+
+local function zeros(m)
+
+    local Z = {}
+
+    for i = 1,m,1 do
+        Z[i] = 0
+    end
+
+    return Z
+
+end
+
+local function zeros2(m,n)
+
+    local Z = {}
+
+    for i = 1,m,1 do
+        Z[i] = {}
+        for j = 1,n,1 do
+            Z[i][j] = 0
+        end
+    end
+
+    return Z
+
+end
+
+local function diag(q)
+
+    local n = #q
+    local D = {}
+
+    if n == 1 then
+        return q
+    else
+        for i = 1,n,1 do
+            D[i] = {}
+            for j = 1,n,1 do
+                if i == j then
+                    D[i][j] = q[i]
+                else
+                    D[i][j] = 0
+                end
+            end
+        end
+    end
+
+    return D
+
+end
+
 
 -------------------------------------------------
 -- PUBLIC FUNCTIONS
@@ -55,13 +106,8 @@ end
 function robot:gravLoad(q, grav)
 
     local tau = {}
-    local qd = {}
-    local qdd = {}
-
-    for i = 1,self.n,1 do
-        qd[i] = 0
-        qdd[i] = 0
-    end
+    local qd = zeros(self.n)
+    local qdd = zeros(self.n)
 
     if grav == nil then
         tau = self:rne(q, qd, qdd)
@@ -74,23 +120,55 @@ end
 
 -------------------------------------------------
 
+function robot:coriolis(q, qd)
+
+    local C = {}
+    local C2 = matrix {}
+    local Csq = {}
+    local qdd = zeros(self.n)
+    local grav = matrix {{0},{0},{0}}
+
+
+    -- find the torques that depend on a single finite joint speed,
+    -- these are due to the squared (centripetal) terms
+    for i = 1,self.n,1 do
+        local QD = zeros(self.n)
+        QD[i] = 1
+        tau = self:rne(q, QD, qdd, grav)
+        Csq[i] = tau
+        C[i] = matrix {zeros(self.n)}
+    end
+
+    -- find the torques that depend on a pair of finite joint speeds,
+    -- these are due to the product (Coridolis) terms
+    for i = 1,self.n,1 do
+        for j = i+1,self.n,1 do
+            local QD = zeros(self.n)
+            QD[i] = 1
+            QD[j] = 1
+            tau = matrix {self:rne(q, QD, qdd, grav)}
+            temp = 0.5 * (tau - matrix {Csq[j]} - matrix {Csq[i]})
+            C[j] = C[j] + temp * qd[i]
+            C[i] = C[i] + temp * qd[j]
+        end
+    end
+
+    C2 = C[1]
+    for i = 2,self.n,1 do
+       C2 = matrix.concatv(C2, C[i])
+    end
+
+    C = matrix.transpose(C2)
+    Csq = matrix.transpose(matrix:new(Csq))
+
+    C = C + Csq * matrix:new(diag(qd))
+
+    return C
+
+end
+-------------------------------------------------
+
 function robot:rne(q, qd, qdd, grav)
-
-    -- set velocity and acceleration to zero if not given
-    -- local qd = {}
-    -- local qdd = {}
-
-    -- if Qdd == nil then
-        -- for i = 1,self.n,1 do qdd[i] = 0 end
-    -- else
-        -- qdd = Qdd
-    -- end
-
-    -- if Qd == nil then
-        -- for i = 1,self.n,1 do qd[i] = 0 end
-    -- else
-        -- qd = Qd
-    -- end
 
     local vd = {}
     if grav == nil then

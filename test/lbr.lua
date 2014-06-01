@@ -63,7 +63,10 @@ L[6] = link.new(a[6], alpha[6], d[6], m6, rc6, I6)
 L[7] = link.new(a[7], alpha[7], d[7], m7, rc7, I7)
 
 lbr = robot.new(L)
+
+print('\nDH-Parameter')
 lbr:printDH()
+
 q1 = {0, 0, 0, 0, 0, 0, 0};
 q2 = {0, 0.3491, 0, 0.3491, 0, 0, 0};
 
@@ -74,6 +77,12 @@ qdd = {1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5}
 grav = matrix {{0},{0},{-9.81}}
 tau = lbr:gravLoad(q2,grav)
 
+print('\ngravLoad')
 for i = 1,7,1 do
     print(tau[i])
 end
+
+C = lbr:coriolis(q2,qd)
+
+print('\ncoriolis')
+matrix.print(C)
